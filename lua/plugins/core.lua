@@ -21,6 +21,11 @@ return {
     },
   },
   {
+    "github/copilot.vim",
+    event = "InsertEnter",
+    autoStart = true
+  },
+  {
     "s1n7ax/nvim-window-picker",
     lazy = true,
     main = "window-picker",
