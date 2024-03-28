@@ -74,7 +74,7 @@ end
 ---@param condition boolean # Whether to run the function or not
 ---@return any|nil result # the result of the function running or nil
 function M.conditional_func(func, condition, ...)
-  -- if the condition is true or no condition is provided, evaluate the function with the rest of the parameters and return the result
+  -- if the condition is true, evaluate the function with the rest of the parameters and return the result
   if condition and type(func) == "function" then return func(...) end
 end
 
@@ -185,7 +185,8 @@ end
 function M.toggle_term_cmd(opts)
   local terms = astronvim.user_terminals
   -- if a command string is provided, create a basic table for Terminal:new() options
-  if type(opts) == "string" then opts = { cmd = opts, hidden = true } end
+  if type(opts) == "string" then opts = { cmd = opts } end
+  opts = M.extend_tbl({ hidden = true }, opts)
   local num = vim.v.count > 0 and vim.v.count or 1
   -- if terminal doesn't exist yet, create it
   if not terms[opts.cmd] then terms[opts.cmd] = {} end
