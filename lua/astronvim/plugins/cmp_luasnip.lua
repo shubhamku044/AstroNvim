@@ -2,6 +2,7 @@ local function has_words_before()
   local line, col = (unpack or table.unpack)(vim.api.nvim_win_get_cursor(0))
   return col ~= 0 and vim.api.nvim_buf_get_lines(0, line - 1, line, true)[1]:sub(col, col):match "%s" == nil
 end
+local function is_visible(cmp) return cmp.core.view:visible() or vim.fn.pumvisible() == 1 end
 
 return {
   {
@@ -19,33 +20,7 @@ return {
       },
       { "hrsh7th/cmp-buffer", lazy = true },
       { "hrsh7th/cmp-path", lazy = true },
-      {
-        "hrsh7th/cmp-nvim-lsp",
-        lazy = true,
-        dependencies = {
-          "AstroNvim/astrolsp",
-          optional = true,
-          opts = {
-            capabilities = {
-              textDocument = {
-                completion = {
-                  completionItem = {
-                    documentationFormat = { "markdown", "plaintext" },
-                    snippetSupport = true,
-                    preselectSupport = true,
-                    insertReplaceSupport = true,
-                    labelDetailsSupport = true,
-                    deprecatedSupport = true,
-                    commitCharactersSupport = true,
-                    tagSupport = { valueSet = { 1 } },
-                    resolveSupport = { properties = { "documentation", "detail", "additionalTextEdits" } },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
+      { "hrsh7th/cmp-nvim-lsp", lazy = true },
     },
     event = "InsertEnter",
     opts = function()
@@ -88,20 +63,32 @@ return {
         mapping = {
           ["<Up>"] = cmp.mapping.select_prev_item { behavior = cmp.SelectBehavior.Select },
           ["<Down>"] = cmp.mapping.select_next_item { behavior = cmp.SelectBehavior.Select },
-          ["<C-p>"] = cmp.mapping.select_prev_item { behavior = cmp.SelectBehavior.Insert },
-          ["<C-n>"] = cmp.mapping.select_next_item { behavior = cmp.SelectBehavior.Insert },
-          ["<C-k>"] = cmp.mapping.select_prev_item { behavior = cmp.SelectBehavior.Insert },
-          ["<C-j>"] = cmp.mapping.select_next_item { behavior = cmp.SelectBehavior.Insert },
-          ["<C-u>"] = cmp.mapping(cmp.mapping.scroll_docs(-4), { "i", "c" }),
-          ["<C-d>"] = cmp.mapping(cmp.mapping.scroll_docs(4), { "i", "c" }),
+          ["<C-P>"] = cmp.mapping(function()
+            if is_visible(cmp) then
+              cmp.select_prev_item { behavior = cmp.SelectBehavior.Insert }
+            else
+              cmp.complete()
+            end
+          end),
+          ["<C-N>"] = cmp.mapping(function()
+            if is_visible(cmp) then
+              cmp.select_next_item { behavior = cmp.SelectBehavior.Insert }
+            else
+              cmp.complete()
+            end
+          end),
+          ["<C-K>"] = cmp.mapping.select_prev_item { behavior = cmp.SelectBehavior.Insert },
+          ["<C-J>"] = cmp.mapping.select_next_item { behavior = cmp.SelectBehavior.Insert },
+          ["<C-U>"] = cmp.mapping(cmp.mapping.scroll_docs(-4), { "i", "c" }),
+          ["<C-D>"] = cmp.mapping(cmp.mapping.scroll_docs(4), { "i", "c" }),
           ["<C-Space>"] = cmp.mapping(cmp.mapping.complete(), { "i", "c" }),
-          ["<C-y>"] = cmp.config.disable,
-          ["<C-e>"] = cmp.mapping { i = cmp.mapping.abort(), c = cmp.mapping.close() },
+          ["<C-Y>"] = cmp.config.disable,
+          ["<C-E>"] = cmp.mapping { i = cmp.mapping.abort(), c = cmp.mapping.close() },
           ["<CR>"] = cmp.mapping.confirm { select = false },
           ["<Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then
+            if is_visible(cmp) then
               cmp.select_next_item()
-            elseif vim.snippet and vim.snippet.jumpable(1) then
+            elseif vim.snippet and vim.snippet.active { direction = 1 } then
               vim.schedule(function() vim.snippet.jump(1) end)
             elseif has_words_before() then
               cmp.complete()
@@ -110,9 +97,9 @@ return {
             end
           end, { "i", "s" }),
           ["<S-Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then
+            if is_visible(cmp) then
               cmp.select_prev_item()
-            elseif vim.snippet and vim.snippet.jumpable(-1) then
+            elseif vim.snippet and vim.snippet.active { direction = -1 } then
               vim.schedule(function() vim.snippet.jump(-1) end)
             else
               fallback()
@@ -123,6 +110,32 @@ return {
       }
     end,
     config = function(...) require "astronvim.plugins.configs.cmp"(...) end,
+  },
+  {
+    "AstroNvim/astrolsp",
+    optional = true,
+    opts = function(_, opts)
+      local astrocore = require "astrocore"
+      if astrocore.is_available "cmp-nvim-lsp" then
+        opts.capabilities = astrocore.extend_tbl(opts.capabilities, {
+          textDocument = {
+            completion = {
+              completionItem = {
+                documentationFormat = { "markdown", "plaintext" },
+                snippetSupport = true,
+                preselectSupport = true,
+                insertReplaceSupport = true,
+                labelDetailsSupport = true,
+                deprecatedSupport = true,
+                commitCharactersSupport = true,
+                tagSupport = { valueSet = { 1 } },
+                resolveSupport = { properties = { "documentation", "detail", "additionalTextEdits" } },
+              },
+            },
+          },
+        })
+      end
+    end,
   },
   {
     "L3MON4D3/LuaSnip",
@@ -146,7 +159,7 @@ return {
 
           if not opts.mappings then opts.mappings = {} end
           opts.mapping["<Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then
+            if is_visible(cmp) then
               cmp.select_next_item()
             elseif luasnip.expand_or_locally_jumpable() then
               luasnip.expand_or_jump()
@@ -157,7 +170,7 @@ return {
             end
           end, { "i", "s" })
           opts.mapping["<S-Tab>"] = cmp.mapping(function(fallback)
-            if cmp.visible() then
+            if is_visible(cmp) then
               cmp.select_prev_item()
             elseif luasnip.jumpable(-1) then
               luasnip.jump(-1)

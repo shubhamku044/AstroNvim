@@ -33,9 +33,11 @@ function M.generate_snapshot(write)
       if file then
         file:write(("  { %q, "):format(plugin[1]))
         if plugin.version then
-          file:write(("version = %q"):format(plugin.version))
+          local version_format = "version = %q"
+          file:write(version_format:format(plugin.version))
         else
-          file:write(("commit = %q"):format(plugin.commit))
+          local commit_format = "commit = %q"
+          file:write(commit_format:format(plugin.commit))
         end
         file:write ", optional = true },\n"
       end

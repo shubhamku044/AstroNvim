@@ -3,6 +3,13 @@ return {
   ---@type AstroCoreOpts
   opts = {
     commands = {
+      AstroVersion = {
+        function()
+          local version = require("astronvim").version()
+          if version then require("astrocore").notify(("Version: *%s*"):format(version)) end
+        end,
+        desc = "Check AstroNvim Version",
+      },
       AstroReload = { function() require("astrocore").reload() end, desc = "Reload AstroNvim (Experimental)" },
       AstroUpdate = { function() require("astrocore").update_packages() end, desc = "Update Lazy and Mason" },
     },
@@ -144,19 +151,25 @@ return {
             if vim.b[args.buf].astrofile_checked then return end
             vim.b[args.buf].astrofile_checked = true
             vim.schedule(function()
+              if not vim.api.nvim_buf_is_valid(args.buf) then return end
               local astro = require "astrocore"
               local current_file = vim.api.nvim_buf_get_name(args.buf)
               if vim.g.vscode or not (current_file == "" or vim.bo[args.buf].buftype == "nofile") then
                 astro.event "File"
                 local folder = vim.fn.fnamemodify(current_file, ":p:h")
                 if vim.fn.has "win32" == 1 then folder = ('"%s"'):format(folder) end
-                if astro.cmd({ "git", "-C", folder, "rev-parse" }, false) or astro.file_worktree() then
-                  astro.event "GitFile"
+                if vim.fn.executable "git" == 1 then
+                  if astro.cmd({ "git", "-C", folder, "rev-parse" }, false) or astro.file_worktree() then
+                    astro.event "GitFile"
+                    pcall(vim.api.nvim_del_augroup_by_name, "file_user_events")
+                  end
+                else
                   pcall(vim.api.nvim_del_augroup_by_name, "file_user_events")
                 end
                 vim.schedule(function()
-                  vim.api.nvim_exec_autocmds(args.event, { buffer = args.buf })
-                  vim.api.nvim_exec_autocmds("FileType", { buffer = args.buf })
+                  if require("astrocore.buffer").is_valid(args.buf) then
+                    vim.api.nvim_exec_autocmds(args.event, { buffer = args.buf, data = args.data })
+                  end
                 end)
               end
             end)
@@ -167,7 +180,26 @@ return {
         {
           event = { "VimEnter", "FileType", "BufEnter", "WinEnter" },
           desc = "URL Highlighting",
-          callback = function() require("astrocore").set_url_match() end,
+          callback = function(args)
+            for _, win in ipairs(vim.api.nvim_list_wins()) do
+              if
+                vim.api.nvim_win_get_buf(win) == args.buf
+                and vim.tbl_get(require "astrocore", "config", "features", "highlighturl")
+                and not vim.w[win].highlighturl_enabled
+              then
+                require("astrocore").set_url_match(win)
+              end
+            end
+          end,
+        },
+        {
+          event = { "VimEnter", "User" },
+          desc = "Set up the default HighlightURL highlight group",
+          callback = function(args)
+            if args.event == "VimEnter" or args.match == "AstroColorScheme" then
+              vim.api.nvim_set_hl(0, "HighlightURL", { default = true, underline = true })
+            end
+          end,
         },
       },
       highlightyank = {
@@ -190,6 +222,13 @@ return {
             vim.b[args.buf].cmp_enabled = false -- disable completion
             vim.b[args.buf].miniindentscope_disable = true -- disable indent scope
             vim.b[args.buf].matchup_matchparen_enabled = 0 -- disable vim-matchup
+            local astrocore = require "astrocore"
+            if vim.tbl_get(astrocore.config, "features", "highlighturl") then
+              astrocore.config.features.highlighturl = false
+              vim.tbl_map(function(win)
+                if vim.w[win].highlighturl_enabled then astrocore.delete_url_match(win) end
+              end, vim.api.nvim_list_wins())
+            end
             local ibl_avail, ibl = pcall(require, "ibl") -- disable indent-blankline
             if ibl_avail then ibl.setup_buffer(args.buf, { enabled = false }) end
             local illuminate_avail, illuminate = pcall(require, "illuminate.engine") -- disable vim-illuminate
@@ -218,7 +257,7 @@ return {
       terminal_settings = {
         {
           event = "TermOpen",
-          desc = "Disable line number/fold column/sign column for terinals",
+          desc = "Disable line number/fold column/sign column for terminals",
           callback = function()
             vim.opt_local.number = false
             vim.opt_local.relativenumber = false
@@ -230,7 +269,7 @@ return {
       unlist_quickfix = {
         {
           event = "FileType",
-          desc = "Unlist quickfist buffers",
+          desc = "Unlist quickfix buffers",
           pattern = "qf",
           callback = function() vim.opt_local.buflisted = false end,
         },
